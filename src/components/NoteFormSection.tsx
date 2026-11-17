@@ -59,7 +59,8 @@ export function NoteFormSection() {
 
       setSubmitState('error');
       setFeedbackNote(
-        data?.error || 'Could not send right now. Please try again in a moment.',
+        data?.error ||
+          `Could not send right now (HTTP ${response.status}). Please try again in a moment.`,
       );
     } catch (error) {
       const isTimeout = error instanceof Error && error.name === 'AbortError';

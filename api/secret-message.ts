@@ -1,3 +1,4 @@
+import process from 'node:process';
 import { Resend } from 'resend';
 
 const DEFAULT_RECIPIENT = 'akramjonabduhakimov1@gmail.com';
