@@ -118,6 +118,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (!resendApiKey) {
     res.status(503).json({
       ok: false,
+      code: 'MISSING_RESEND_KEY',
       error: 'RESEND_API_KEY is not configured on the server.',
     });
     return;
