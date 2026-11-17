@@ -62,7 +62,7 @@ export function NoteFormSection() {
             _captcha: 'false',
           }),
         },
-        3500,
+        15000,
       );
 
       const fallbackData = (await fallbackRes.json().catch(() => null)) as
@@ -87,7 +87,7 @@ export function NoteFormSection() {
       ) {
         setSubmitState('activation');
         setFeedbackNote(
-          'One-time activation needed: please click the confirmation link just sent to your inbox, then press Send again.',
+          `One-time activation needed for this deployed URL: please click the confirmation link just sent to ${RECIPIENT_EMAIL}, then press Send again.`,
         );
         return;
       }
