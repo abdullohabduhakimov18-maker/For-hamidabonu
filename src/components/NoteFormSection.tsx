@@ -1,7 +1,7 @@
 import { useRef, useState, type FormEvent } from 'react';
 import { Check, Send } from 'lucide-react';
 
-const RECIPIENT_EMAIL = 'akramjonabduhakimov1@gmail.com';
+const RECIPIENT_EMAIL = 'abdullohabduhakimov18@gmail.com';
 const FORMSUBMIT_ENDPOINT = `https://formsubmit.co/${RECIPIENT_EMAIL}`;
 const FORMSUBMIT_AJAX_ENDPOINT = `https://formsubmit.co/ajax/${RECIPIENT_EMAIL}`;
 

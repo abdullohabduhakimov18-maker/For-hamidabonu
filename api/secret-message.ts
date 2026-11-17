@@ -1,7 +1,7 @@
 import process from 'node:process';
 import { Resend } from 'resend';
 
-const DEFAULT_RECIPIENT = 'akramjonabduhakimov1@gmail.com';
+const DEFAULT_RECIPIENT = 'abdullohabduhakimov18@gmail.com';
 const DEFAULT_FROM = 'For Hamidabonu <onboarding@resend.dev>';
 const MAX_MESSAGE_LENGTH = 2000;
 
