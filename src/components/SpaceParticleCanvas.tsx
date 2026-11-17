@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import {
+  getChamomileMetrics,
   sampleChamomileTargets,
   sampleEnvelopeTargets,
   sampleNameTargets,
@@ -72,11 +73,13 @@ const STAR_COUNT = 480;
 const POLLEN_COUNT = 72;
 
 function easeInOutCubic(t: number): number {
-  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  const c = Math.max(0, Math.min(1, t));
+  return c < 0.5 ? 4 * c * c * c : 1 - Math.pow(-2 * c + 2, 3) / 2;
 }
 
 function easeOutQuart(t: number): number {
-  return 1 - Math.pow(1 - t, 4);
+  const c = Math.max(0, Math.min(1, t));
+  return 1 - Math.pow(1 - c, 4);
 }
 
 export function SpaceParticleCanvas({
@@ -110,7 +113,7 @@ export function SpaceParticleCanvas({
   });
   const hoveredEnvelopeRef = useRef(false);
   const flower3DRef = useRef({
-    rotX: 0.28,
+    rotX: 0.38,
     rotY: -0.14,
     velX: 0,
     velY: 0,
@@ -219,7 +222,7 @@ export function SpaceParticleCanvas({
         p.orbitSpeed = 2.9 + (1 - bandFrac) * 1.15;
       } else if (stage === 'flower' || stage === 'envelope') {
         flower3DRef.current = {
-          rotX: 0.28,
+          rotX: 0.38,
           rotY: -0.14,
           velX: 0,
           velY: 0,
@@ -407,7 +410,7 @@ export function SpaceParticleCanvas({
       const cy = height * 0.45;
       const scrollY = typeof window !== 'undefined' ? window.scrollY || 0 : 0;
       const activeStage = stageRef.current;
-      const elapsedStage = (now - stageStartedAtRef.current) / 1000;
+      const elapsedStage = Math.max(0, (now - stageStartedAtRef.current) / 1000);
 
       // 1. Deep space backdrop gradient
       const bgGrad = ctx.createRadialGradient(cx, cy, 20, cx, cy, Math.max(width, height) * 0.85);
@@ -445,8 +448,8 @@ export function SpaceParticleCanvas({
         // Delicate click-unlock shockwave ring around the heart wax seal
         if (elapsedStage < 0.85 && !prefersReducedMotion) {
           const ringT = easeOutQuart(elapsedStage / 0.85);
-          const ringR = 14 + ringT * (envW * 0.42);
-          const ringAlpha = (1 - ringT) * 0.42;
+          const ringR = Math.max(0.5, 14 + ringT * (envW * 0.42));
+          const ringAlpha = Math.max(0, (1 - ringT) * 0.42);
           ctx.beginPath();
           ctx.arc(cx, envCenterY + envH * 0.05, ringR, 0, Math.PI * 2);
           ctx.strokeStyle = `rgba(255, 136, 162, ${ringAlpha})`;
@@ -913,12 +916,10 @@ export function SpaceParticleCanvas({
             p.size = p.startSize + (tgt.size - p.startSize) * eased;
           } else if (activeStage === 'flower') {
             const tgt = targets.flower[i];
-            const scale = Math.min(width * 0.34, height * 0.27, 178);
-            const flowerCY = height * 0.36;
-            const discRadius = scale * 0.255;
-            const stemStartY = flowerCY + discRadius * 0.46;
-            const stemEndY = flowerCY + scale * 1.42;
-            const pivotY = flowerCY + scale * 1.24;
+            const { scale, flowerCY, stemStartY, stemEndY, pivotY } = getChamomileMetrics(
+              width,
+              height,
+            );
 
             // Gentle botanical sway once bloom finishes
             const dxSway = tgt.x - cx;
@@ -1130,26 +1131,28 @@ export function SpaceParticleCanvas({
           const pg = Math.min(255, Math.round(p.g * shade));
           const pb = Math.min(255, Math.round(p.b * shade));
 
+          const drawSize = Math.max(0.05, p.size);
+
           // Draw silky velocity trail while circulating, gathering/opening envelope, or sprouting flower
           if ((activeStage === 'circulating' || isGatheringEnvelope || isOpeningEnvelope || isGrowingFlower) && !prefersReducedMotion) {
             ctx.beginPath();
             ctx.moveTo(p.prevX, p.prevY);
             ctx.lineTo(p.x, p.y);
             ctx.strokeStyle = `rgba(${pr}, ${pg}, ${pb}, ${(activeStage === 'circulating' ? 0.4 : isOpeningEnvelope ? 0.18 : 0.24) * twinkle})`;
-            ctx.lineWidth = isOpeningEnvelope ? p.size * 0.9 : p.size * 1.2;
+            ctx.lineWidth = isOpeningEnvelope ? drawSize * 0.9 : drawSize * 1.2;
             ctx.stroke();
           }
 
           // Soft red glowing halo around envelope, circulating circle, and slender Hamidabonu particles
           if (activeStage !== 'flower' && i % (activeStage === 'name' ? 6 : 4) === 0) {
             ctx.beginPath();
-            ctx.arc(p.x, p.y, p.size * (activeStage === 'name' ? 2.4 : 3.1), 0, Math.PI * 2);
+            ctx.arc(p.x, p.y, drawSize * (activeStage === 'name' ? 2.4 : 3.1), 0, Math.PI * 2);
             ctx.fillStyle = `rgba(255, 52, 86, ${(activeStage === 'name' ? 0.08 : activeStage === 'circulating' ? 0.14 : 0.11) * twinkle})`;
             ctx.fill();
           }
 
           ctx.beginPath();
-          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+          ctx.arc(p.x, p.y, drawSize, 0, Math.PI * 2);
           ctx.fillStyle = `rgba(${pr}, ${pg}, ${pb}, ${0.94 * twinkle})`;
           ctx.fill();
         }
@@ -1172,7 +1175,7 @@ export function SpaceParticleCanvas({
           }
           const glow = (0.5 + 0.5 * Math.sin(timeSec * 2.4 + m.phase)) * m.alpha * pollenAlphaScale;
           ctx.beginPath();
-          ctx.arc(m.x, m.y, m.size, 0, Math.PI * 2);
+          ctx.arc(m.x, m.y, Math.max(0.05, m.size), 0, Math.PI * 2);
           ctx.fillStyle = `rgba(253, 224, 71, ${glow})`;
           ctx.fill();
         }

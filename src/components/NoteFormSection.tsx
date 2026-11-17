@@ -137,10 +137,13 @@ export function NoteFormSection() {
       className="relative z-20 flex min-h-[75svh] w-full items-center justify-center px-6 py-24"
     >
       <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#0b0e1c]/70 p-6 shadow-2xl backdrop-blur-md sm:p-9">
-        <header className="mb-6">
+        <header className="mb-6 space-y-1.5">
           <h2 className="font-editorial text-3xl font-normal tracking-wide text-slate-100 sm:text-4xl">
             Secret message
           </h2>
+          <p className="text-sm text-slate-400">
+            Your message will go to him.
+          </p>
         </header>
 
         {submitState === 'sent' ? (

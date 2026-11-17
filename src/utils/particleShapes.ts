@@ -353,9 +353,21 @@ export function sampleNameTargets(
   return targets;
 }
 
+export function getChamomileMetrics(width: number, height: number) {
+  const cx = width / 2;
+  const scale = Math.min(width * 0.34, height * 0.27, 178);
+  const flowerCY = height * 0.35;
+  const discRadius = scale * 0.235;
+  const stemStartY = flowerCY + discRadius * 0.42;
+  const stemEndY = flowerCY + scale * 1.26;
+  const pivotY = flowerCY + scale * 1.12;
+  return { cx, scale, flowerCY, discRadius, stemStartY, stemEndY, pivotY };
+}
+
 /**
- * Generates botanical particle targets for a luminous chamomile flower
- * with golden Fibonacci center, silky white ray petals, and slender green stem & leaves.
+ * Generates botanical particle targets for an unmistakable chamomile flower
+ * with a tall golden-yellow Fibonacci cone center, 14 separated reflexed white ray petals,
+ * and a slender green stem with airy, thread-like chamomile foliage.
  */
 export function sampleChamomileTargets(
   width: number,
@@ -363,46 +375,45 @@ export function sampleChamomileTargets(
   totalCount: number,
 ): TargetPoint[] {
   const rand = seededRandom(9917);
-  const cx = width / 2;
-  // Position blossom comfortably above the multilingual "I love you" caption zone
-  const scale = Math.min(width * 0.34, height * 0.27, 178);
-  const flowerCY = height * 0.36;
+  const { cx, scale, flowerCY, discRadius, stemStartY, stemEndY } = getChamomileMetrics(
+    width,
+    height,
+  );
 
-  const centerTotal = Math.round(totalCount * 0.26);
-  const calyxCount = Math.round(centerTotal * 0.12);
+  const centerTotal = Math.round(totalCount * 0.28);
+  const calyxCount = Math.round(centerTotal * 0.10);
   const domeCount = centerTotal - calyxCount;
-  const stemCount = Math.round(totalCount * 0.17);
+  const stemCount = Math.round(totalCount * 0.18);
   const petalCountTotal = totalCount - centerTotal - stemCount;
 
   const targets: TargetPoint[] = [];
 
-  // 1a. Plump 3D golden conical-hemispherical Fibonacci phyllotaxis dome
-  const discRadius = scale * 0.255;
+  // 1a. Prominent, plump 3D golden-yellow conical chamomile center (Fibonacci florets)
   const goldenAngle = Math.PI * (3 - Math.sqrt(5));
   for (let i = 0; i < domeCount; i++) {
     const frac = (i + 0.5) / domeCount;
     const rad = Math.sqrt(frac) * discRadius;
     const theta = i * goldenAngle;
-    const px = cx + Math.cos(theta) * rad + (rand() - 0.5) * 0.9;
-    const py = flowerCY + Math.sin(theta) * rad + (rand() - 0.5) * 0.9;
-    // True chamomile conical dome rising warmly toward +z
-    const domeHeight = Math.pow(Math.max(0, 1 - frac * 0.90), 0.62) * discRadius * 1.15;
-    // Tiny floret dimple ripple following Fibonacci spiral
-    const floretBump = Math.sin(frac * 38) * 1.2;
+    const px = cx + Math.cos(theta) * rad + (rand() - 0.5) * 0.7;
+    const py = flowerCY + Math.sin(theta) * rad + (rand() - 0.5) * 0.7;
+
+    // Characteristic tall rounded-conical chamomile disc protruding warmly toward +z
+    const domeHeight = Math.pow(Math.max(0, 1 - frac * 0.86), 0.58) * discRadius * 1.48;
+    const floretBump = Math.sin(frac * 42) * 1.1;
     const pz = domeHeight + floretBump;
 
-    // Honey-amber base collar -> buttercup gold body -> sunlit creamy-gold crown
+    // Sunny chamomile yellow-gold body with warm amber-gold base collar and sunlit crown
     const crown = Math.max(0, 1 - frac);
-    const isOuterCollar = frac > 0.78;
+    const isOuterCollar = frac > 0.82;
     const r = isOuterCollar
-      ? Math.round(226 + rand() * 18)
-      : Math.round(244 + crown * 11);
+      ? Math.round(234 + rand() * 16)
+      : Math.round(250 + crown * 5);
     const g = isOuterCollar
-      ? Math.round(142 + rand() * 30)
-      : Math.round(182 + crown * 58);
+      ? Math.round(156 + rand() * 26)
+      : Math.round(196 + crown * 44);
     const b = isOuterCollar
-      ? Math.round(18 + rand() * 20)
-      : Math.round(32 + crown * 86);
+      ? Math.round(16 + rand() * 18)
+      : Math.round(28 + crown * 68);
 
     targets.push({
       x: px,
@@ -411,7 +422,7 @@ export function sampleChamomileTargets(
       r,
       g,
       b,
-      size: 1.18 + crown * 0.38 + rand() * 0.35,
+      size: 1.2 + crown * 0.36 + rand() * 0.32,
       role: 'center',
       phase: frac * 0.4,
       grow: {
@@ -421,51 +432,51 @@ export function sampleChamomileTargets(
     });
   }
 
-  // 1b. Clean green calyx / phyllary bract cup tucked behind the golden dome
+  // 1b. Green involucre calyx cup tucked neatly underneath the dome & petals (never peeking between petals)
   const bractCount = 14;
   for (let i = 0; i < calyxCount; i++) {
     const bIdx = i % bractCount;
     const bAngle = (bIdx / bractCount) * Math.PI * 2 + (rand() - 0.5) * 0.08;
     const u = rand();
-    const rOut = discRadius * (0.58 + u * 0.58);
-    const lateral = (rand() - 0.5) * (1 - u * 0.65) * discRadius * 0.28;
+    const rOut = discRadius * (0.35 + u * 0.52);
+    const lateral = (rand() - 0.5) * (1 - u * 0.5) * discRadius * 0.24;
     const cosB = Math.cos(bAngle);
     const sinB = Math.sin(bAngle);
     const px = cx + cosB * rOut - sinB * lateral;
     const py = flowerCY + sinB * rOut + cosB * lateral;
-    const pz = -discRadius * (0.18 + u * 0.32);
+    const pz = -discRadius * (0.28 + u * 0.26);
 
     targets.push({
       x: px,
       y: py,
       z: pz,
-      r: Math.round(78 + rand() * 32),
-      g: Math.round(166 + rand() * 42),
-      b: Math.round(86 + rand() * 28),
-      size: 1.05 + rand() * 0.45,
+      r: Math.round(74 + rand() * 28),
+      g: Math.round(158 + rand() * 38),
+      b: Math.round(80 + rand() * 24),
+      size: 1.0 + rand() * 0.4,
       role: 'center',
       phase: 0.25 + u * 0.25,
       grow: {
         kind: 'center',
-        centerFrac: 0.7 + u * 0.3,
+        centerFrac: 0.72 + u * 0.28,
       },
     });
   }
 
-  // 2. 18 sculpted, cupped & gracefully reflexed chamomile ray petals
-  const numPetals = 18;
+  // 2. 14 clean, distinctly separated, gracefully reflexed white chamomile ray petals
+  const numPetals = 14;
   const perPetal = Math.floor(petalCountTotal / numPetals);
   const remainder = petalCountTotal - perPetal * numPetals;
 
   for (let pIdx = 0; pIdx < numPetals; pIdx++) {
     const baseAngle = (pIdx / numPetals) * Math.PI * 2 - Math.PI / 2;
-    const angleJitter = (rand() - 0.5) * 0.036;
+    const angleJitter = (rand() - 0.5) * 0.045;
     const angle = baseAngle + angleJitter;
 
-    const isUpperWhorl = pIdx % 2 === 0;
-    const petalLen = scale * (isUpperWhorl ? 0.76 : 0.72) * (0.94 + rand() * 0.11);
-    const petalHalfW = scale * (0.132 + (rand() - 0.5) * 0.014);
-    const startDist = discRadius * 0.80;
+    const petalLen = scale * 0.58 * (0.94 + rand() * 0.12);
+    // Narrow enough that adjacent petals always keep crisp dark-space separation
+    const petalHalfW = scale * (0.082 + (rand() - 0.5) * 0.008);
+    const startDist = discRadius * 0.90;
     const countForThis = perPetal + (pIdx < remainder ? 1 : 0);
 
     const cosA = Math.cos(angle);
@@ -473,57 +484,51 @@ export function sampleChamomileTargets(
     const perpX = -sinA;
     const perpY = cosA;
 
-    const rimCount = Math.round(countForThis * 0.38);
-    const veinCount = Math.round(countForThis * 0.18);
+    const rimCount = Math.round(countForThis * 0.26);
+    // Natural subtle reflex variation so petals feel organically poised
+    const reflexVar = 0.88 + rand() * 0.24;
 
     for (let i = 0; i < countForThis; i++) {
       let u: number;
-      let latNorm: number; // -1..1 across petal width
+      let latNorm: number;
       let isEdge = false;
-      let isVein = false;
 
       if (i < rimCount) {
-        // Crisp sculpted outline around both flanks and rounded chamomile tip
         isEdge = true;
         const tEdge = i / Math.max(1, rimCount - 1);
-        u = Math.pow(tEdge, 0.92);
+        u = Math.pow(tEdge, 0.94);
         latNorm = i % 2 === 0 ? 1 : -1;
-      } else if (i < rimCount + veinCount) {
-        // Two subtle longitudinal chamomile petal veins
-        isVein = true;
-        const j = i - rimCount;
-        u = 0.06 + (j / Math.max(1, veinCount - 1)) * 0.82;
-        latNorm = (j % 2 === 0 ? 0.34 : -0.34) + (rand() - 0.5) * 0.05;
       } else {
-        // Silky interior blade fill
         u = 0.03 + rand() * 0.95;
-        latNorm = (rand() * 2 - 1) * 0.90;
+        // Slightly denser near center-blade for silky, solid white ray florets
+        const rawLat = rand() * 2 - 1;
+        latNorm = Math.sign(rawLat) * Math.pow(Math.abs(rawLat), 0.85) * 0.92;
       }
 
-      // Spatulate chamomile petal profile: slender collar -> plump rounded upper blade -> soft tip
+      // Authentic chamomile oblanceolate petal contour: narrow base -> oblong rounded blade -> blunt tip
       const taperProfile =
-        0.30 * (1 - u) + Math.pow(Math.sin(Math.pow(u, 0.78) * Math.PI * 0.96), 0.75) * 0.96;
-      // Subtle gentle notch indent right at the rounded apex
-      const tipNotch = u > 0.92 ? 1 - Math.exp(-Math.pow(latNorm * 2.4, 2)) * 0.12 : 1;
-      const widthAtU = petalHalfW * taperProfile * tipNotch;
+        0.34 * (1 - u) + Math.pow(Math.sin(Math.pow(u, 0.72) * Math.PI * 0.96), 0.65) * 0.92;
+      // Soft blunt chamomile apex (very gentle rounded tip, not a sharp point)
+      const tipRound = u > 0.90 ? 1 - Math.pow((u - 0.90) / 0.10, 2) * 0.22 : 1;
+      const widthAtU = petalHalfW * taperProfile * tipRound;
       const lateral = latNorm * widthAtU;
 
       const dist = startDist + u * petalLen;
-      const gentleBend = Math.sin(u * Math.PI) * (isUpperWhorl ? 2.2 : -2.2);
-      const px = cx + cosA * dist + perpX * (lateral + gentleBend) + (rand() - 0.5) * 0.65;
-      const py = flowerCY + sinA * dist + perpY * (lateral + gentleBend) + (rand() - 0.5) * 0.65;
+      const gentleCurve = Math.sin(u * Math.PI) * ((pIdx % 2 === 0 ? 1.4 : -1.4));
+      const px = cx + cosA * dist + perpX * (lateral + gentleCurve) + (rand() - 0.5) * 0.55;
+      const py = flowerCY + sinA * dist + perpY * (lateral + gentleCurve) + (rand() - 0.5) * 0.55;
 
-      // Authentic 3D chamomile petal curve: emerges tucked under dome, cups upward, then gracefully reflexes backward toward tip
-      const whorlZ = isUpperWhorl ? 3.5 : -2.5;
-      const archZ = Math.sin(u * Math.PI * 0.85) * 12 - Math.pow(u, 1.75) * 24;
-      const spoonCupZ = (Math.pow(Math.abs(latNorm), 1.6) - 0.35) * 3.8 * Math.sin(u * Math.PI);
-      const pz = whorlZ + archZ + spoonCupZ + (rand() - 0.5) * 0.9;
+      // Iconic chamomile posture: emerges flat under the golden cone, arches gently, then droops/reflexes backward
+      const archZ =
+        (Math.sin(u * Math.PI * 0.65) * 4 - Math.pow(u, 1.55) * 29 * reflexVar) - 2;
+      const cupZ = (Math.pow(Math.abs(latNorm), 1.5) - 0.3) * 2.2 * Math.sin(u * Math.PI);
+      const pz = archZ + cupZ + (rand() - 0.5) * 0.75;
 
-      // Warm ivory-cream collar near the golden disc fading to luminous pure snow-white along blade
-      const collarWarmth = Math.max(0, 1 - u * 3.4);
-      const r = Math.round(252 + (1 - collarWarmth) * 3);
-      const g = Math.round(245 + (1 - collarWarmth) * 9);
-      const b = Math.round(212 + (1 - collarWarmth) * 43);
+      // Pure crisp snow-white blade with a delicate warm ivory collar right at the golden disc
+      const collarWarmth = Math.max(0, 1 - u * 4.0);
+      const r = Math.round(253 + (1 - collarWarmth) * 2);
+      const g = Math.round(248 + (1 - collarWarmth) * 7);
+      const b = Math.round(220 + (1 - collarWarmth) * 35);
 
       targets.push({
         x: px,
@@ -532,7 +537,7 @@ export function sampleChamomileTargets(
         r,
         g,
         b,
-        size: isEdge ? 1.15 + rand() * 0.52 : isVein ? 0.95 + rand() * 0.42 : 0.98 + rand() * 0.52,
+        size: isEdge ? 1.05 + rand() * 0.42 : 0.95 + rand() * 0.48,
         role: 'petal',
         phase: 0.2 + u * 0.65,
         grow: {
@@ -545,30 +550,28 @@ export function sampleChamomileTargets(
     }
   }
 
-  // 3. Slender 3D botanical cylindrical S-curved stem & feathery chamomile foliage
-  const stemStartY = flowerCY + discRadius * 0.46;
-  const stemEndY = flowerCY + scale * 1.42;
-  const stemMainCount = Math.round(stemCount * 0.44);
+  // 3. Slender 3D botanical S-curved stem & airy thread-like chamomile foliage
+  const stemMainCount = Math.round(stemCount * 0.46);
   const leafParticles = stemCount - stemMainCount;
 
   for (let i = 0; i < stemMainCount; i++) {
     const t = i / Math.max(1, stemMainCount - 1);
-    const curveX = cx + Math.sin(t * Math.PI * 1.15) * (scale * 0.085);
+    const curveX = cx + Math.sin(t * Math.PI * 1.15) * (scale * 0.08);
     const py = stemStartY + t * (stemEndY - stemStartY);
     const cylAngle = rand() * Math.PI * 2;
-    const cylRad = (1 - t * 0.22) * 2.9 * (0.45 + rand() * 0.55);
+    const cylRad = (1 - t * 0.22) * 2.4 * (0.45 + rand() * 0.55);
     const px = curveX + Math.cos(cylAngle) * cylRad;
-    const pz = -9 - Math.sin(t * Math.PI) * 11 + Math.sin(cylAngle) * cylRad;
+    const pz = -discRadius * 0.45 - Math.sin(t * Math.PI) * 10 + Math.sin(cylAngle) * cylRad;
     const frontLight = 0.5 + 0.5 * Math.sin(cylAngle);
 
     targets.push({
       x: px,
-      y: py + (rand() - 0.5) * 0.8,
+      y: py + (rand() - 0.5) * 0.7,
       z: pz,
-      r: Math.round(74 + frontLight * 36),
-      g: Math.round(162 + frontLight * 54),
-      b: Math.round(88 + frontLight * 36),
-      size: 1.05 + frontLight * 0.45,
+      r: Math.round(72 + frontLight * 34),
+      g: Math.round(164 + frontLight * 52),
+      b: Math.round(84 + frontLight * 34),
+      size: 1.0 + frontLight * 0.4,
       role: 'stem',
       phase: 0.45 + t * 0.45,
       grow: {
@@ -578,12 +581,12 @@ export function sampleChamomileTargets(
     });
   }
 
-  // Four feathery bipinnate chamomile leaves branching gracefully in 3D
+  // Delicate, thread-like bipinnate chamomile leaves (fine feathery segments)
   const branches = [
-    { tBase: 0.36, dir: -1, len: scale * 0.38, angle: -0.62, zDir: 1 },
-    { tBase: 0.50, dir: 1, len: scale * 0.36, angle: -0.56, zDir: -0.9 },
-    { tBase: 0.66, dir: -1, len: scale * 0.30, angle: -0.48, zDir: 0.7 },
-    { tBase: 0.79, dir: 1, len: scale * 0.24, angle: -0.42, zDir: 0.85 },
+    { tBase: 0.34, dir: -1, len: scale * 0.34, angle: -0.58, zDir: 0.8 },
+    { tBase: 0.50, dir: 1, len: scale * 0.32, angle: -0.52, zDir: -0.8 },
+    { tBase: 0.68, dir: -1, len: scale * 0.27, angle: -0.46, zDir: 0.6 },
+    { tBase: 0.81, dir: 1, len: scale * 0.22, angle: -0.40, zDir: 0.75 },
   ];
   const perBranch = Math.floor(leafParticles / branches.length);
 
@@ -592,41 +595,43 @@ export function sampleChamomileTargets(
       bIdx === branches.length - 1
         ? leafParticles - perBranch * (branches.length - 1)
         : perBranch;
-    const baseX = cx + Math.sin(br.tBase * Math.PI * 1.15) * (scale * 0.085);
+    const baseX = cx + Math.sin(br.tBase * Math.PI * 1.15) * (scale * 0.08);
     const baseY = stemStartY + br.tBase * (stemEndY - stemStartY);
-    const baseZ = -9 - Math.sin(br.tBase * Math.PI) * 11;
+    const baseZ = -discRadius * 0.45 - Math.sin(br.tBase * Math.PI) * 10;
 
     for (let i = 0; i < count; i++) {
-      const isRachis = i % 4 === 0;
-      const u = isRachis ? (i / Math.max(1, count - 1)) : 0.14 + Math.floor((i % 24) / 4) * 0.145;
+      const isRachis = i % 5 === 0;
+      const u = isRachis
+        ? i / Math.max(1, count - 1)
+        : 0.16 + Math.floor((i % 25) / 5) * 0.155;
       const spineAngle = br.dir === 1 ? br.angle : Math.PI - br.angle;
-      const droop = Math.pow(u, 1.8) * 10;
+      const droop = Math.pow(u, 1.8) * 9;
       const spineX = baseX + Math.cos(spineAngle) * (u * br.len);
       const spineY = baseY + Math.sin(spineAngle) * (u * br.len) + droop;
-      let pz = baseZ + br.zDir * u * 20;
+      let pz = baseZ + br.zDir * u * 16;
 
       let px = spineX;
       let py = spineY;
       if (!isRachis) {
-        // Thread-like lacy chamomile leaflets paired along each pinna node
+        // Fine, thread-like chamomile leaflet forks
         const pinnaT = rand();
-        const subLen = (1 - u * 0.35) * scale * 0.125 * pinnaT;
+        const subLen = (1 - u * 0.32) * scale * 0.13 * pinnaT;
         const subSide = i % 2 === 0 ? 1 : -1;
-        const subAngle = spineAngle + subSide * 0.72 + pinnaT * 0.15 * br.dir;
+        const subAngle = spineAngle + subSide * 0.68 + pinnaT * 0.12 * br.dir;
         px += Math.cos(subAngle) * subLen;
         py += Math.sin(subAngle) * subLen;
-        pz += subSide * 5 * pinnaT;
+        pz += subSide * 4 * pinnaT;
       }
 
-      const shade = 0.85 + rand() * 0.25;
+      const shade = 0.86 + rand() * 0.24;
       targets.push({
-        x: px + (rand() - 0.5) * 0.7,
-        y: py + (rand() - 0.5) * 0.7,
-        z: pz + (rand() - 0.5) * 0.9,
-        r: Math.min(255, Math.round(96 * shade + rand() * 24)),
-        g: Math.min(255, Math.round(196 * shade + rand() * 26)),
-        b: Math.min(255, Math.round(108 * shade + rand() * 22)),
-        size: isRachis ? 1.05 + rand() * 0.35 : 0.90 + rand() * 0.42,
+        x: px + (rand() - 0.5) * 0.45,
+        y: py + (rand() - 0.5) * 0.45,
+        z: pz + (rand() - 0.5) * 0.65,
+        r: Math.min(255, Math.round(92 * shade + rand() * 22)),
+        g: Math.min(255, Math.round(194 * shade + rand() * 26)),
+        b: Math.min(255, Math.round(104 * shade + rand() * 20)),
+        size: isRachis ? 0.95 + rand() * 0.3 : 0.82 + rand() * 0.35,
         role: 'stem',
         phase: 0.55 + u * 0.4,
         grow: {
