@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express, { type Request, type Response } from 'express';
 import path from 'node:path';
+import { Resend } from 'resend';
 
 function resolvePort(): number {
   const portFlagIdx = process.argv.indexOf('--port');
@@ -13,7 +14,7 @@ function resolvePort(): number {
 }
 
 const PORT = resolvePort();
-const DEFAULT_RECIPIENT = 'abdullohabduhakimov18@gmail.com';
+const DEFAULT_RECIPIENT = 'akramjonabduhakimov1@gmail.com';
 const DEFAULT_FROM = 'For Hamidabonu <onboarding@resend.dev>';
 const MAX_MESSAGE_LENGTH = 2000;
 
@@ -40,47 +41,6 @@ function buildEmailHtml(message: string): string {
 </html>`;
 }
 
-async function sendViaResend(
-  apiKey: string,
-  from: string,
-  to: string,
-  message: string,
-): Promise<{ ok: true; id?: string } | { ok: false; status: number; error: string }> {
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      from,
-      to: [to],
-      subject: 'Secret message',
-      text: `From: Hamidabonu\n\n${message}`,
-      html: buildEmailHtml(message),
-    }),
-    signal: AbortSignal.timeout(8000),
-  });
-
-  const payload = (await response.json().catch(() => null)) as
-    | { id?: string; message?: string; error?: { message?: string } }
-    | null;
-
-  if (!response.ok) {
-    const errorMessage =
-      payload?.message ||
-      payload?.error?.message ||
-      `Resend request failed (${response.status})`;
-    return {
-      ok: false,
-      status: response.status >= 400 && response.status < 500 ? response.status : 502,
-      error: errorMessage,
-    };
-  }
-
-  return { ok: true, id: payload?.id };
-}
-
 async function startServer() {
   const app = express();
   app.use(express.json({ limit: '32kb' }));
@@ -90,12 +50,13 @@ async function startServer() {
     const trimmedMessage = rawMessage.trim();
 
     if (!trimmedMessage) {
-      res.status(400).json({ error: 'Please write a message before sending.' });
+      res.status(400).json({ ok: false, error: 'Please write a message before sending.' });
       return;
     }
 
     if (trimmedMessage.length > MAX_MESSAGE_LENGTH) {
       res.status(400).json({
+        ok: false,
         error: `Message must be ${MAX_MESSAGE_LENGTH} characters or fewer.`,
       });
       return;
@@ -109,36 +70,38 @@ async function startServer() {
     if (!resendApiKey) {
       res.status(503).json({
         ok: false,
-        code: 'MISSING_RESEND_KEY',
         error: 'RESEND_API_KEY is not configured on the server.',
       });
       return;
     }
 
     try {
-      const result = await sendViaResend(
-        resendApiKey,
-        fromEmail,
-        recipient,
-        trimmedMessage,
-      );
+      const resend = new Resend(resendApiKey);
+      const { data, error } = await resend.emails.send({
+        from: fromEmail,
+        to: [recipient],
+        subject: 'Secret message',
+        text: `From: Hamidabonu\n\n${trimmedMessage}`,
+        html: buildEmailHtml(trimmedMessage),
+      });
 
-      if (!result.ok) {
-        res.status(result.status).json({ ok: false, error: result.error });
+      if (error) {
+        const statusCode =
+          'statusCode' in error && typeof error.statusCode === 'number'
+            ? error.statusCode
+            : 502;
+        res.status(statusCode).json({
+          ok: false,
+          error: error.message || 'Could not send email via Resend.',
+        });
         return;
       }
 
-      res.status(200).json({ ok: true, provider: 'resend', id: result.id });
-    } catch (error) {
-      const isTimeout =
-        error instanceof Error &&
-        (error.name === 'TimeoutError' || error.name === 'AbortError');
-
-      res.status(isTimeout ? 504 : 500).json({
+      res.status(200).json({ ok: true, provider: 'resend', id: data?.id });
+    } catch {
+      res.status(500).json({
         ok: false,
-        error: isTimeout
-          ? 'Email service timed out. Please try again.'
-          : 'Could not send right now. Please try again in a moment.',
+        error: 'Could not send right now. Please try again in a moment.',
       });
     }
   });

@@ -1,4 +1,6 @@
-const DEFAULT_RECIPIENT = 'abdullohabduhakimov18@gmail.com';
+import { Resend } from 'resend';
+
+const DEFAULT_RECIPIENT = 'akramjonabduhakimov1@gmail.com';
 const DEFAULT_FROM = 'For Hamidabonu <onboarding@resend.dev>';
 const MAX_MESSAGE_LENGTH = 2000;
 
@@ -115,7 +117,6 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (!resendApiKey) {
     res.status(503).json({
       ok: false,
-      code: 'MISSING_RESEND_KEY',
       error: 'RESEND_API_KEY is not configured on the server.',
     });
     return;
@@ -125,51 +126,33 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     process.env.SECRET_MESSAGE_RECIPIENT_EMAIL?.trim() || DEFAULT_RECIPIENT;
   const fromEmail = process.env.RESEND_FROM_EMAIL?.trim() || DEFAULT_FROM;
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 8000);
-
   try {
-    const response = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${resendApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from: fromEmail,
-        to: [recipient],
-        subject: 'Secret message',
-        text: `From: Hamidabonu\n\n${trimmedMessage}`,
-        html: buildEmailHtml(trimmedMessage),
-      }),
-      signal: controller.signal,
+    const resend = new Resend(resendApiKey);
+    const { data, error } = await resend.emails.send({
+      from: fromEmail,
+      to: [recipient],
+      subject: 'Secret message',
+      text: `From: Hamidabonu\n\n${trimmedMessage}`,
+      html: buildEmailHtml(trimmedMessage),
     });
 
-    const payload = (await response.json().catch(() => null)) as
-      | { id?: string; message?: string; error?: { message?: string } }
-      | null;
-
-    if (!response.ok) {
-      const errorMessage =
-        payload?.message ||
-        payload?.error?.message ||
-        `Resend request failed (${response.status}).`;
-      const status =
-        response.status >= 400 && response.status < 500 ? response.status : 502;
-      res.status(status).json({ ok: false, error: errorMessage });
+    if (error) {
+      const statusCode =
+        'statusCode' in error && typeof error.statusCode === 'number'
+          ? error.statusCode
+          : 502;
+      res.status(statusCode).json({
+        ok: false,
+        error: error.message || 'Could not send email via Resend.',
+      });
       return;
     }
 
-    res.status(200).json({ ok: true, provider: 'resend', id: payload?.id });
-  } catch (error) {
-    const isTimeout = error instanceof Error && error.name === 'AbortError';
-    res.status(isTimeout ? 504 : 500).json({
+    res.status(200).json({ ok: true, provider: 'resend', id: data?.id });
+  } catch {
+    res.status(500).json({
       ok: false,
-      error: isTimeout
-        ? 'Email service timed out. Please try again.'
-        : 'Could not send right now. Please try again in a moment.',
+      error: 'Could not send right now. Please try again in a moment.',
     });
-  } finally {
-    clearTimeout(timer);
   }
 }
