@@ -1,0 +1,222 @@
+import 'dotenv/config';
+import express, { type Request, type Response } from 'express';
+import path from 'node:path';
+
+const PORT = Number(process.env.PORT) || 3000;
+const DEFAULT_RECIPIENT = 'abdullohabduhakimov18@gmail.com';
+const DEFAULT_FROM = 'For Hamidabonu <onboarding@resend.dev>';
+const MAX_MESSAGE_LENGTH = 2000;
+
+function escapeHtml(text: string): string {
+  return text
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function buildEmailHtml(message: string): string {
+  const safeMessage = escapeHtml(message);
+  return `<!doctype html>
+<html>
+  <body style="margin:0;padding:24px;background-color:#05060c;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#f1f5f9;">
+    <div style="max-width:560px;margin:0 auto;border:1px solid rgba(255,255,255,0.12);border-radius:16px;background-color:#0b0e1c;padding:28px;">
+      <p style="margin:0 0 8px;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:#fda4af;">For Hamidabonu</p>
+      <h1 style="margin:0 0 20px;font-size:24px;font-weight:500;color:#ffffff;">Secret message</h1>
+      <div style="border-radius:12px;background-color:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);padding:18px;font-size:15px;line-height:1.65;color:#e2e8f0;white-space:pre-wrap;">${safeMessage}</div>
+    </div>
+  </body>
+</html>`;
+}
+
+async function sendViaResend(
+  apiKey: string,
+  from: string,
+  to: string,
+  message: string,
+): Promise<{ ok: true; id?: string } | { ok: false; status: number; error: string }> {
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from,
+      to: [to],
+      subject: 'Secret message',
+      text: `From: Hamidabonu\n\n${message}`,
+      html: buildEmailHtml(message),
+    }),
+    signal: AbortSignal.timeout(8000),
+  });
+
+  const payload = (await response.json().catch(() => null)) as
+    | { id?: string; message?: string; error?: { message?: string } }
+    | null;
+
+  if (!response.ok) {
+    const errorMessage =
+      payload?.message ||
+      payload?.error?.message ||
+      `Resend request failed (${response.status})`;
+    return {
+      ok: false,
+      status: response.status >= 400 && response.status < 500 ? response.status : 502,
+      error: errorMessage,
+    };
+  }
+
+  return { ok: true, id: payload?.id };
+}
+
+async function sendViaFormSubmitFallback(
+  to: string,
+  message: string,
+  originHeader?: string,
+): Promise<
+  | { ok: true }
+  | { ok: false; status: number; error: string; needsActivation?: boolean }
+> {
+  const refererOrigin =
+    originHeader ||
+    process.env.APP_URL?.trim() ||
+    `http://localhost:${PORT}`;
+
+  const response = await fetch(`https://formsubmit.co/ajax/${encodeURIComponent(to)}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      Origin: refererOrigin,
+      Referer: `${refererOrigin.replace(/\/$/, '')}/`,
+    },
+    body: JSON.stringify({
+      name: 'Hamidabonu',
+      message,
+      _subject: 'Secret message',
+      _template: 'table',
+      _captcha: 'false',
+    }),
+    signal: AbortSignal.timeout(5000),
+  });
+
+  const data = (await response.json().catch(() => null)) as
+    | { success?: boolean | string; message?: string }
+    | null;
+
+  if (response.ok && (data?.success === true || data?.success === 'true')) {
+    return { ok: true };
+  }
+
+  const apiMsg = typeof data?.message === 'string' ? data.message : '';
+  const needsActivation =
+    apiMsg.toLowerCase().includes('activat') ||
+    apiMsg.toLowerCase().includes('confirm');
+
+  return {
+    ok: false,
+    status: needsActivation ? 400 : 502,
+    error:
+      apiMsg ||
+      'Could not deliver via fallback service. Configure RESEND_API_KEY for instant delivery.',
+    needsActivation,
+  };
+}
+
+async function startServer() {
+  const app = express();
+  app.use(express.json({ limit: '32kb' }));
+
+  app.post('/api/secret-message', async (req: Request, res: Response) => {
+    const rawMessage = typeof req.body?.message === 'string' ? req.body.message : '';
+    const trimmedMessage = rawMessage.trim();
+
+    if (!trimmedMessage) {
+      res.status(400).json({ error: 'Please write a message before sending.' });
+      return;
+    }
+
+    if (trimmedMessage.length > MAX_MESSAGE_LENGTH) {
+      res.status(400).json({
+        error: `Message must be ${MAX_MESSAGE_LENGTH} characters or fewer.`,
+      });
+      return;
+    }
+
+    const recipient =
+      process.env.SECRET_MESSAGE_RECIPIENT_EMAIL?.trim() || DEFAULT_RECIPIENT;
+    const resendApiKey = process.env.RESEND_API_KEY?.trim();
+    const fromEmail = process.env.RESEND_FROM_EMAIL?.trim() || DEFAULT_FROM;
+
+    try {
+      if (resendApiKey) {
+        const result = await sendViaResend(
+          resendApiKey,
+          fromEmail,
+          recipient,
+          trimmedMessage,
+        );
+
+        if (!result.ok) {
+          res.status(result.status).json({ error: result.error });
+          return;
+        }
+
+        res.status(200).json({ ok: true, provider: 'resend', id: result.id });
+        return;
+      }
+
+      const fallbackResult = await sendViaFormSubmitFallback(
+        recipient,
+        trimmedMessage,
+        req.get('origin') || undefined,
+      );
+
+      if (!fallbackResult.ok) {
+        res.status(fallbackResult.status).json({
+          error: fallbackResult.error,
+          needsActivation: fallbackResult.needsActivation ?? false,
+        });
+        return;
+      }
+
+      res.status(200).json({ ok: true, provider: 'formsubmit' });
+    } catch (error) {
+      const isTimeout =
+        error instanceof Error &&
+        (error.name === 'TimeoutError' || error.name === 'AbortError');
+
+      res.status(isTimeout ? 504 : 500).json({
+        error: isTimeout
+          ? 'Sending timed out. Add RESEND_API_KEY in Secrets for instant delivery.'
+          : 'Could not send right now. Please try again in a moment.',
+      });
+    }
+  });
+
+  if (process.env.NODE_ENV === 'production') {
+    const distDir = path.resolve(process.cwd(), 'dist');
+    app.use(express.static(distDir));
+    app.get('*', (_req: Request, res: Response) => {
+      res.sendFile(path.join(distDir, 'index.html'));
+    });
+  } else {
+    const { createServer: createViteServer } = await import('vite');
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: 'spa',
+    });
+    app.use(vite.middlewares);
+  }
+
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server listening on http://0.0.0.0:${PORT}`);
+  });
+}
+
+startServer().catch((err) => {
+  console.error('Failed to start server:', err);
+  process.exit(1);
+});
