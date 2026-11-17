@@ -71,60 +71,6 @@ async function sendViaResend(
   return { ok: true, id: payload?.id };
 }
 
-async function sendViaFormSubmitFallback(
-  to: string,
-  message: string,
-  originHeader?: string,
-): Promise<
-  | { ok: true }
-  | { ok: false; status: number; error: string; needsActivation?: boolean }
-> {
-  const refererOrigin =
-    originHeader ||
-    process.env.APP_URL?.trim() ||
-    `http://localhost:${PORT}`;
-
-  const response = await fetch(`https://formsubmit.co/ajax/${encodeURIComponent(to)}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-      Origin: refererOrigin,
-      Referer: `${refererOrigin.replace(/\/$/, '')}/`,
-    },
-    body: JSON.stringify({
-      name: 'Hamidabonu',
-      message,
-      _subject: 'Secret message',
-      _template: 'table',
-      _captcha: 'false',
-    }),
-    signal: AbortSignal.timeout(5000),
-  });
-
-  const data = (await response.json().catch(() => null)) as
-    | { success?: boolean | string; message?: string }
-    | null;
-
-  if (response.ok && (data?.success === true || data?.success === 'true')) {
-    return { ok: true };
-  }
-
-  const apiMsg = typeof data?.message === 'string' ? data.message : '';
-  const needsActivation =
-    apiMsg.toLowerCase().includes('activat') ||
-    apiMsg.toLowerCase().includes('confirm');
-
-  return {
-    ok: false,
-    status: needsActivation ? 400 : 502,
-    error:
-      apiMsg ||
-      'Could not deliver via fallback service. Configure RESEND_API_KEY for instant delivery.',
-    needsActivation,
-  };
-}
-
 async function startServer() {
   const app = express();
   app.use(express.json({ limit: '32kb' }));
@@ -150,47 +96,38 @@ async function startServer() {
     const resendApiKey = process.env.RESEND_API_KEY?.trim();
     const fromEmail = process.env.RESEND_FROM_EMAIL?.trim() || DEFAULT_FROM;
 
+    if (!resendApiKey) {
+      res.status(503).json({
+        ok: false,
+        code: 'MISSING_RESEND_KEY',
+        error: 'RESEND_API_KEY is not configured on the server.',
+      });
+      return;
+    }
+
     try {
-      if (resendApiKey) {
-        const result = await sendViaResend(
-          resendApiKey,
-          fromEmail,
-          recipient,
-          trimmedMessage,
-        );
-
-        if (!result.ok) {
-          res.status(result.status).json({ error: result.error });
-          return;
-        }
-
-        res.status(200).json({ ok: true, provider: 'resend', id: result.id });
-        return;
-      }
-
-      const fallbackResult = await sendViaFormSubmitFallback(
+      const result = await sendViaResend(
+        resendApiKey,
+        fromEmail,
         recipient,
         trimmedMessage,
-        req.get('origin') || undefined,
       );
 
-      if (!fallbackResult.ok) {
-        res.status(fallbackResult.status).json({
-          error: fallbackResult.error,
-          needsActivation: fallbackResult.needsActivation ?? false,
-        });
+      if (!result.ok) {
+        res.status(result.status).json({ ok: false, error: result.error });
         return;
       }
 
-      res.status(200).json({ ok: true, provider: 'formsubmit' });
+      res.status(200).json({ ok: true, provider: 'resend', id: result.id });
     } catch (error) {
       const isTimeout =
         error instanceof Error &&
         (error.name === 'TimeoutError' || error.name === 'AbortError');
 
       res.status(isTimeout ? 504 : 500).json({
+        ok: false,
         error: isTimeout
-          ? 'Sending timed out. Add RESEND_API_KEY in Secrets for instant delivery.'
+          ? 'Email service timed out. Please try again.'
           : 'Could not send right now. Please try again in a moment.',
       });
     }

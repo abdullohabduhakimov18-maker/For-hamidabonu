@@ -1,6 +1,9 @@
 import { useState, type FormEvent } from 'react';
 import { Check, Send } from 'lucide-react';
 
+const RECIPIENT_EMAIL = 'abdullohabduhakimov18@gmail.com';
+const FORMSUBMIT_AJAX_ENDPOINT = `https://formsubmit.co/ajax/${RECIPIENT_EMAIL}`;
+
 type SubmitState = 'idle' | 'sending' | 'sent' | 'activation' | 'error';
 
 export function NoteFormSection() {
@@ -9,6 +12,58 @@ export function NoteFormSection() {
   const [feedbackNote, setFeedbackNote] = useState('');
 
   const trimmedMessage = message.trim();
+
+  const tryFormSubmitFallback = async (text: string) => {
+    const fallbackRes = await fetch(FORMSUBMIT_AJAX_ENDPOINT, {
+      method: 'POST',
+      referrerPolicy: 'origin',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        name: 'Hamidabonu',
+        message: text,
+        _subject: 'Secret message',
+        _template: 'table',
+        _captcha: 'false',
+      }),
+      signal: AbortSignal.timeout(6000),
+    });
+
+    const fallbackData = (await fallbackRes.json().catch(() => null)) as
+      | { success?: boolean | string; message?: string }
+      | null;
+
+    if (
+      fallbackRes.ok &&
+      (fallbackData?.success === true || fallbackData?.success === 'true')
+    ) {
+      setSubmitState('sent');
+      setFeedbackNote('Your secret message has been sent.');
+      setMessage('');
+      return;
+    }
+
+    const apiMsg =
+      typeof fallbackData?.message === 'string' ? fallbackData.message : '';
+    if (
+      apiMsg.toLowerCase().includes('activat') ||
+      apiMsg.toLowerCase().includes('confirm')
+    ) {
+      setSubmitState('activation');
+      setFeedbackNote(
+        'One-time activation needed: please click the confirmation link just sent to your inbox, then press Send again.',
+      );
+      return;
+    }
+
+    setSubmitState('error');
+    setFeedbackNote(
+      apiMsg ||
+        'Could not send right now. Add RESEND_API_KEY to your environment variables for fast email delivery.',
+    );
+  };
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -30,13 +85,18 @@ export function NoteFormSection() {
       });
 
       const data = (await response.json().catch(() => null)) as
-        | { ok?: boolean; error?: string; needsActivation?: boolean }
+        | { ok?: boolean; code?: string; error?: string; needsActivation?: boolean }
         | null;
 
       if (response.ok && data?.ok) {
         setSubmitState('sent');
         setFeedbackNote('Your secret message has been sent.');
         setMessage('');
+        return;
+      }
+
+      if (response.status === 404 || data?.code === 'MISSING_RESEND_KEY') {
+        await tryFormSubmitFallback(trimmedMessage);
         return;
       }
 
