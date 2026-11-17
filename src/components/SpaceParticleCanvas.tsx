@@ -348,8 +348,8 @@ export function SpaceParticleCanvas({
     };
 
     const handleResize = () => {
-      const w = window.innerWidth;
-      const h = window.innerHeight;
+      const w = Math.max(1, window.innerWidth);
+      const h = Math.max(1, window.innerHeight);
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       canvas.width = Math.floor(w * dpr);
       canvas.height = Math.floor(h * dpr);

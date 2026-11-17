@@ -1,68 +1,113 @@
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { Check, Send } from 'lucide-react';
 
 const RECIPIENT_EMAIL = 'abdullohabduhakimov18@gmail.com';
+const FORMSUBMIT_ENDPOINT = `https://formsubmit.co/${RECIPIENT_EMAIL}`;
 const FORMSUBMIT_AJAX_ENDPOINT = `https://formsubmit.co/ajax/${RECIPIENT_EMAIL}`;
 
 type SubmitState = 'idle' | 'sending' | 'sent' | 'activation' | 'error';
+
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
 
 export function NoteFormSection() {
   const [message, setMessage] = useState('');
   const [submitState, setSubmitState] = useState<SubmitState>('idle');
   const [feedbackNote, setFeedbackNote] = useState('');
 
+  const fallbackFormRef = useRef<HTMLFormElement | null>(null);
+  const fallbackMessageInputRef = useRef<HTMLInputElement | null>(null);
+
   const trimmedMessage = message.trim();
 
-  const tryFormSubmitFallback = async (text: string) => {
-    const fallbackRes = await fetch(FORMSUBMIT_AJAX_ENDPOINT, {
-      method: 'POST',
-      referrerPolicy: 'origin',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
-      body: JSON.stringify({
-        name: 'Hamidabonu',
-        message: text,
-        _subject: 'Secret message',
-        _template: 'table',
-        _captcha: 'false',
-      }),
-      signal: AbortSignal.timeout(6000),
-    });
-
-    const fallbackData = (await fallbackRes.json().catch(() => null)) as
-      | { success?: boolean | string; message?: string }
-      | null;
-
-    if (
-      fallbackRes.ok &&
-      (fallbackData?.success === true || fallbackData?.success === 'true')
-    ) {
+  const submitViaHiddenIframe = (text: string): boolean => {
+    if (fallbackFormRef.current && fallbackMessageInputRef.current) {
+      fallbackMessageInputRef.current.value = text;
+      fallbackFormRef.current.submit();
       setSubmitState('sent');
       setFeedbackNote('Your secret message has been sent.');
       setMessage('');
-      return;
+      return true;
     }
+    return false;
+  };
 
-    const apiMsg =
-      typeof fallbackData?.message === 'string' ? fallbackData.message : '';
-    if (
-      apiMsg.toLowerCase().includes('activat') ||
-      apiMsg.toLowerCase().includes('confirm')
-    ) {
-      setSubmitState('activation');
-      setFeedbackNote(
-        'One-time activation needed: please click the confirmation link just sent to your inbox, then press Send again.',
+  const tryFormSubmitFallback = async (text: string) => {
+    try {
+      const fallbackRes = await fetchWithTimeout(
+        FORMSUBMIT_AJAX_ENDPOINT,
+        {
+          method: 'POST',
+          referrerPolicy: 'origin',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          },
+          body: JSON.stringify({
+            name: 'Hamidabonu',
+            message: text,
+            _subject: 'Secret message',
+            _template: 'table',
+            _captcha: 'false',
+          }),
+        },
+        3500,
       );
-      return;
-    }
 
-    setSubmitState('error');
-    setFeedbackNote(
-      apiMsg ||
-        'Could not send right now. Add RESEND_API_KEY to your environment variables for fast email delivery.',
-    );
+      const fallbackData = (await fallbackRes.json().catch(() => null)) as
+        | { success?: boolean | string; message?: string }
+        | null;
+
+      if (
+        fallbackRes.ok &&
+        (fallbackData?.success === true || fallbackData?.success === 'true')
+      ) {
+        setSubmitState('sent');
+        setFeedbackNote('Your secret message has been sent.');
+        setMessage('');
+        return;
+      }
+
+      const apiMsg =
+        typeof fallbackData?.message === 'string' ? fallbackData.message : '';
+      if (
+        apiMsg.toLowerCase().includes('activat') ||
+        apiMsg.toLowerCase().includes('confirm')
+      ) {
+        setSubmitState('activation');
+        setFeedbackNote(
+          'One-time activation needed: please click the confirmation link just sent to your inbox, then press Send again.',
+        );
+        return;
+      }
+
+      if (submitViaHiddenIframe(text)) {
+        return;
+      }
+
+      setSubmitState('error');
+      setFeedbackNote(
+        apiMsg ||
+          'Could not send right now. Please try again in a moment.',
+      );
+    } catch {
+      if (submitViaHiddenIframe(text)) {
+        return;
+      }
+      setSubmitState('error');
+      setFeedbackNote('Could not send right now. Please try again in a moment.');
+    }
   };
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -73,16 +118,19 @@ export function NoteFormSection() {
     setFeedbackNote('');
 
     try {
-      const response = await fetch('/api/secret-message', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+      const response = await fetchWithTimeout(
+        '/api/secret-message',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            message: trimmedMessage,
+          }),
         },
-        body: JSON.stringify({
-          message: trimmedMessage,
-        }),
-        signal: AbortSignal.timeout(10000),
-      });
+        9000,
+      );
 
       const data = (await response.json().catch(() => null)) as
         | { ok?: boolean; code?: string; error?: string; needsActivation?: boolean }
@@ -95,7 +143,12 @@ export function NoteFormSection() {
         return;
       }
 
-      if (response.status === 404 || data?.code === 'MISSING_RESEND_KEY') {
+      if (
+        response.status === 404 ||
+        response.status === 405 ||
+        data?.code === 'MISSING_RESEND_KEY' ||
+        !data
+      ) {
         await tryFormSubmitFallback(trimmedMessage);
         return;
       }
@@ -112,16 +165,8 @@ export function NoteFormSection() {
       setFeedbackNote(
         data?.error || 'Could not send right now. Please try again in a moment.',
       );
-    } catch (error) {
-      const isTimeout =
-        error instanceof Error &&
-        (error.name === 'TimeoutError' || error.name === 'AbortError');
-      setSubmitState('error');
-      setFeedbackNote(
-        isTimeout
-          ? 'Sending timed out. Please try again in a moment.'
-          : 'Could not send right now. Please try again in a moment.',
-      );
+    } catch {
+      await tryFormSubmitFallback(trimmedMessage);
     }
   };
 
@@ -196,6 +241,27 @@ export function NoteFormSection() {
             </div>
           </form>
         )}
+
+        <iframe
+          name="secret-message-delivery-frame"
+          title="Secret message delivery"
+          className="hidden"
+          aria-hidden="true"
+        />
+        <form
+          ref={fallbackFormRef}
+          action={FORMSUBMIT_ENDPOINT}
+          method="POST"
+          target="secret-message-delivery-frame"
+          className="hidden"
+          aria-hidden="true"
+        >
+          <input type="hidden" name="name" value="Hamidabonu" />
+          <input type="hidden" name="_subject" value="Secret message" />
+          <input type="hidden" name="_template" value="table" />
+          <input type="hidden" name="_captcha" value="false" />
+          <input ref={fallbackMessageInputRef} type="hidden" name="message" value="" />
+        </form>
       </div>
     </section>
   );

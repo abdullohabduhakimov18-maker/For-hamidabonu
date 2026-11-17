@@ -12,7 +12,6 @@ interface ApiRequest {
 interface ApiResponse {
   status: (statusCode: number) => ApiResponse;
   json: (body: unknown) => void;
-  setHeader?: (name: string, value: string) => void;
   end?: () => void;
 }
 
@@ -40,7 +39,7 @@ function buildEmailHtml(message: string): string {
 }
 
 async function readJsonBody(req: ApiRequest): Promise<Record<string, unknown>> {
-  if (req.body && typeof req.body === 'object' && !Buffer.isBuffer(req.body)) {
+  if (req.body && typeof req.body === 'object' && !(req.body instanceof Uint8Array)) {
     return req.body as Record<string, unknown>;
   }
 
@@ -48,16 +47,25 @@ async function readJsonBody(req: ApiRequest): Promise<Record<string, unknown>> {
     return (JSON.parse(req.body) as Record<string, unknown>) || {};
   }
 
+  if (req.body instanceof Uint8Array) {
+    const decoded = new TextDecoder().decode(req.body);
+    return decoded.trim() ? ((JSON.parse(decoded) as Record<string, unknown>) || {}) : {};
+  }
+
   if (!req.on) {
     return {};
   }
 
+  const decoder = new TextDecoder();
   const raw = await new Promise<string>((resolve, reject) => {
-    const chunks: string[] = [];
+    let text = '';
     req.on?.('data', (chunk) => {
-      chunks.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'));
+      text += typeof chunk === 'string' ? chunk : decoder.decode(chunk, { stream: true });
     });
-    req.on?.('end', () => resolve(chunks.join('')));
+    req.on?.('end', () => {
+      text += decoder.decode();
+      resolve(text);
+    });
     req.on?.('error', (err) => reject(err));
   });
 
@@ -117,6 +125,9 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     process.env.SECRET_MESSAGE_RECIPIENT_EMAIL?.trim() || DEFAULT_RECIPIENT;
   const fromEmail = process.env.RESEND_FROM_EMAIL?.trim() || DEFAULT_FROM;
 
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+
   try {
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -131,7 +142,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         text: `From: Hamidabonu\n\n${trimmedMessage}`,
         html: buildEmailHtml(trimmedMessage),
       }),
-      signal: AbortSignal.timeout(8000),
+      signal: controller.signal,
     });
 
     const payload = (await response.json().catch(() => null)) as
@@ -151,14 +162,14 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
     res.status(200).json({ ok: true, provider: 'resend', id: payload?.id });
   } catch (error) {
-    const isTimeout =
-      error instanceof Error &&
-      (error.name === 'TimeoutError' || error.name === 'AbortError');
+    const isTimeout = error instanceof Error && error.name === 'AbortError';
     res.status(isTimeout ? 504 : 500).json({
       ok: false,
       error: isTimeout
         ? 'Email service timed out. Please try again.'
         : 'Could not send right now. Please try again in a moment.',
     });
+  } finally {
+    clearTimeout(timer);
   }
 }

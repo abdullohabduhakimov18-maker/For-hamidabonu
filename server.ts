@@ -2,7 +2,17 @@ import 'dotenv/config';
 import express, { type Request, type Response } from 'express';
 import path from 'node:path';
 
-const PORT = Number(process.env.PORT) || 3000;
+function resolvePort(): number {
+  const portFlagIdx = process.argv.indexOf('--port');
+  if (portFlagIdx !== -1 && process.argv[portFlagIdx + 1]) {
+    const parsed = Number(process.argv[portFlagIdx + 1]);
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  }
+  const envPort = Number(process.env.PORT);
+  return Number.isFinite(envPort) && envPort > 0 ? envPort : 3000;
+}
+
+const PORT = resolvePort();
 const DEFAULT_RECIPIENT = 'abdullohabduhakimov18@gmail.com';
 const DEFAULT_FROM = 'For Hamidabonu <onboarding@resend.dev>';
 const MAX_MESSAGE_LENGTH = 2000;
