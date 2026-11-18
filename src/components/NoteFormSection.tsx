@@ -1,11 +1,7 @@
-import { useRef, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { Check, Send } from 'lucide-react';
 
-const RECIPIENT_EMAIL = 'abdullohabduhakimov18@gmail.com';
-const FORMSUBMIT_ENDPOINT = `https://formsubmit.co/${RECIPIENT_EMAIL}`;
-const FORMSUBMIT_AJAX_ENDPOINT = `https://formsubmit.co/ajax/${RECIPIENT_EMAIL}`;
-
-type SubmitState = 'idle' | 'sending' | 'sent' | 'activation' | 'error';
+type SubmitState = 'idle' | 'sending' | 'sent' | 'error';
 
 async function fetchWithTimeout(
   url: string,
@@ -26,88 +22,7 @@ export function NoteFormSection() {
   const [submitState, setSubmitState] = useState<SubmitState>('idle');
   const [feedbackNote, setFeedbackNote] = useState('');
 
-  const fallbackFormRef = useRef<HTMLFormElement | null>(null);
-  const fallbackMessageInputRef = useRef<HTMLInputElement | null>(null);
-
   const trimmedMessage = message.trim();
-
-  const submitViaHiddenIframe = (text: string): boolean => {
-    if (fallbackFormRef.current && fallbackMessageInputRef.current) {
-      fallbackMessageInputRef.current.value = text;
-      fallbackFormRef.current.submit();
-      setSubmitState('sent');
-      setFeedbackNote('Your secret message has been sent.');
-      setMessage('');
-      return true;
-    }
-    return false;
-  };
-
-  const tryFormSubmitFallback = async (text: string) => {
-    try {
-      const fallbackRes = await fetchWithTimeout(
-        FORMSUBMIT_AJAX_ENDPOINT,
-        {
-          method: 'POST',
-          referrerPolicy: 'origin',
-          headers: {
-            'Content-Type': 'application/json',
-            Accept: 'application/json',
-          },
-          body: JSON.stringify({
-            name: 'Hamidabonu',
-            message: text,
-            _subject: 'Secret message',
-            _template: 'table',
-            _captcha: 'false',
-          }),
-        },
-        15000,
-      );
-
-      const fallbackData = (await fallbackRes.json().catch(() => null)) as
-        | { success?: boolean | string; message?: string }
-        | null;
-
-      if (
-        fallbackRes.ok &&
-        (fallbackData?.success === true || fallbackData?.success === 'true')
-      ) {
-        setSubmitState('sent');
-        setFeedbackNote('Your secret message has been sent.');
-        setMessage('');
-        return;
-      }
-
-      const apiMsg =
-        typeof fallbackData?.message === 'string' ? fallbackData.message : '';
-      if (
-        apiMsg.toLowerCase().includes('activat') ||
-        apiMsg.toLowerCase().includes('confirm')
-      ) {
-        setSubmitState('activation');
-        setFeedbackNote(
-          `One-time activation needed: please click the confirmation link sent to ${RECIPIENT_EMAIL}, then press Send again.`,
-        );
-        return;
-      }
-
-      if (submitViaHiddenIframe(text)) {
-        return;
-      }
-
-      setSubmitState('error');
-      setFeedbackNote(
-        apiMsg || 'Could not send right now. Please try again in a moment.',
-      );
-    } catch {
-      if (submitViaHiddenIframe(text)) {
-        return;
-      }
-      setSubmitState('error');
-      setFeedbackNote('Could not send right now. Please try again in a moment.');
-    }
-  };
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -128,11 +43,11 @@ export function NoteFormSection() {
             message: trimmedMessage,
           }),
         },
-        10000,
+        12000,
       );
 
       const data = (await response.json().catch(() => null)) as
-        | { ok?: boolean; code?: string; error?: string }
+        | { ok?: boolean; error?: string }
         | null;
 
       if (response.ok && data?.ok) {
@@ -142,23 +57,19 @@ export function NoteFormSection() {
         return;
       }
 
-      if (
-        response.status === 404 ||
-        response.status === 405 ||
-        data?.code === 'MISSING_RESEND_KEY' ||
-        !data
-      ) {
-        await tryFormSubmitFallback(trimmedMessage);
-        return;
-      }
-
       setSubmitState('error');
       setFeedbackNote(
         data?.error ||
           `Could not send right now (HTTP ${response.status}). Please try again in a moment.`,
       );
-    } catch {
-      await tryFormSubmitFallback(trimmedMessage);
+    } catch (error) {
+      const isTimeout = error instanceof Error && error.name === 'AbortError';
+      setSubmitState('error');
+      setFeedbackNote(
+        isTimeout
+          ? 'Sending timed out. Please try again in a moment.'
+          : 'Could not send right now. Please try again in a moment.',
+      );
     }
   };
 
@@ -212,7 +123,7 @@ export function NoteFormSection() {
               className="w-full resize-y rounded-xl border border-white/12 bg-white/[0.04] px-4 py-3 text-sm leading-relaxed text-slate-100 placeholder:text-slate-500 transition-colors focus:border-rose-400/60 focus:bg-white/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-400/40"
             />
 
-            {(submitState === 'error' || submitState === 'activation') && feedbackNote && (
+            {submitState === 'error' && feedbackNote && (
               <p
                 role="status"
                 className="rounded-xl border border-amber-300/25 bg-amber-500/10 px-4 py-3 text-xs leading-relaxed text-amber-100"
@@ -233,27 +144,6 @@ export function NoteFormSection() {
             </div>
           </form>
         )}
-
-        <iframe
-          name="secret-message-delivery-frame"
-          title="Secret message delivery"
-          className="hidden"
-          aria-hidden="true"
-        />
-        <form
-          ref={fallbackFormRef}
-          action={FORMSUBMIT_ENDPOINT}
-          method="POST"
-          target="secret-message-delivery-frame"
-          className="hidden"
-          aria-hidden="true"
-        >
-          <input type="hidden" name="name" value="Hamidabonu" />
-          <input type="hidden" name="_subject" value="Secret message" />
-          <input type="hidden" name="_template" value="table" />
-          <input type="hidden" name="_captcha" value="false" />
-          <input ref={fallbackMessageInputRef} type="hidden" name="message" value="" />
-        </form>
       </div>
     </section>
   );
